@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Milenami - Déménagement & Logistique (Bêta)</title>
+    <!-- Chargement de Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chargement du font Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <style>
+        /* Réglages généraux pour le look PWA mobile */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* gray-100 */
+        }
+        /* Conteneur principal pour simuler la visualisation sur mobile */
+        #app-container {
+            max-width: 600px;
+            margin: 0 auto;
+            min-height: 100vh;
+            background-color: white;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+        /* Animation de chargement simple */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-top: 4px solid #4f46e5;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#4f46e5', // indigo-600
+                        'secondary': '#8b5cf6', // violet-500
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-100">
+
+    <div id="app-container" class="relative">
+        <!-- Zone de Contenu (la vue actuelle de l'application) -->
+        <main id="content-area" class="pt-4 pb-28 min-h-screen"></main>
+
+        <!-- Barre de Navigation Fixe en Bas (Footer) -->
+        <nav class="fixed bottom-0 left-0 right-0 max-w-lg mx-auto pointer-events-none">
+            <div class="w-full px-4 pointer-events-auto">
+                <div id="nav-bar" class="bg-white p-2 rounded-t-2xl shadow-2xl flex justify-around">
+                    <!-- Les boutons seront rendus ici -->
+                </div>
+            </div>
+        </nav>
+    </div>
+
+    <script>
+        // État Global et Données de Simulation (Mock Data)
+        let currentRoute = 'home';
+        let currentUser = null; // null = non connecté
+        let selectedTransporter = null;
+
+        const mockUser = {
+            displayName: 'Abla Kossi',
+            email: 'abla.kossi@milenami.tg',
+            isTransporter: false
+        };
+
+        const mockTransporters = [
+            { id: 1, name: 'Services Rapides Lomé', vehicle: 'Camion 7.5t', city: 'Lomé', phone: '+22890123456', about: 'Spécialisé dans les déménagements et livraisons express dans la zone de Lomé et ses environs.' },
+            { id: 2, name: 'Trans-Togo Express', vehicle: 'Furgone XXL', city: 'Atakpamé', phone: '+22891234567', about: 'Couverture nationale Togo. Transport de marchandises volumineuses et sécurisé.' },
+            { id: 3, name: 'Logistique Maritime GT', vehicle: 'Daily Box 3t', city: 'Grand-Popo', phone: '+22892345678', about: 'Service fiable entre la capitale et les régions côtières.' }
+        ];
+
+        // --- Fonctions de Routing et Rendu ---
+
+        function setRoute(newRoute, data = null) {
+            // Logic to handle setting data before rendering a specific profile
+            if (newRoute === 'profile' && data) {
+                selectedTransporter = mockTransporters.find(t => t.id === data);
+            }
+            currentRoute = newRoute;
+            renderApp();
+        }
+
+        // Simule la connexion/déconnexion
+        function toggleLogin() {
+            if (currentUser) {
+                currentUser = null;
+                showMessageBox('Déconnexion effectuée.', 'info');
+            } else {
+                currentUser = mockUser;
+                showMessageBox(`Bienvenue, ${mockUser.displayName} ! (Connexion Simulé)`, 'success');
+            }
+            setRoute('home');
+        }
+
+        // Boîte de message personnalisée (remplace alert/confirm)
+        function showMessageBox(message, type = 'info') {
+            const container = document.getElementById('app-container');
+            const box = document.createElement('div');
+            
+            let colorClass, title;
+            switch(type) {
+                case 'success': colorClass = 'bg-green-100 border-green-400 text-green-700'; title = 'Succès'; break;
+                case 'error': colorClass = 'bg-red-100 border-red-400 text-red-700'; title = 'Erreur'; break;
+                case 'info':
+                default: colorClass = 'bg-blue-100 border-blue-400 text-blue-700'; title = 'Information'; break;
+            }
+
+            box.className = `fixed top-4 left-1/2 -translate-x-1/2 p-4 rounded-lg border-l-4 shadow-lg z-50 transition-all duration-300 ease-in-out ${colorClass}`;
+            box.innerHTML = `
+                <div class="flex items-center">
+                    <strong class="font-bold mr-2">${title}:</strong>
+                    <span class="text-sm">${message}</span>
+                </div>
+            `;
+            container.appendChild(box);
+            
+            setTimeout(() => {
+                box.classList.add('opacity-0', 'translate-y-4');
+                box.addEventListener('transitionend', () => box.remove());
+            }, 3000);
+        }
+
+
+        // --- Composants de Vue (Vues) ---
+
+        function renderIcon(iconClass, isActive) {
+            const color = isActive ? 'text-primary' : 'text-gray-400';
+            // Utilise des SVG Lucide/Heros
+            return `<svg class="w-6 h-6 ${color}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        ${iconClass}
+                    </svg>`;
+        }
+
+        function renderNavBar() {
+            const navItems = [
+                { route: 'home', label: 'Accueil', icon: `<path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-10v10a1 1 000-1-1h-3"></path>` },
+                { route: 'request', label: 'Demande', icon: `<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path>` },
+                { route: 'list', label: 'Transporteurs', icon: `<path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6m0 0h18M3 19h18"></path>` },
+                { route: 'messages', label: 'Messages', icon: `<path stroke-linecap="round" stroke-linejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 4v-4z"></path>` },
+            ];
+
+            return navItems.map(item => {
+                const isActive = item.route === currentRoute;
+                const activeClasses = isActive ? 'text-primary font-semibold' : 'text-gray-500';
+
+                return `
+                    <button onclick="setRoute('${item.route}')" class="flex-1 text-center py-2 ${activeClasses} rounded-lg transition-colors">
+                        ${renderIcon(item.icon, isActive)}
+                        <span class="text-xs mt-1">${item.label}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function Home() {
+            const userState = currentUser ? `
+                <div class="p-4 border border-gray-200 rounded-xl bg-white shadow-sm">
+                    <div class="font-medium text-gray-800">${currentUser.displayName}</div>
+                    <div class="text-sm text-gray-500">${currentUser.email}</div>
+                    <div class="mt-4 flex gap-2">
+                        <button onclick="setRoute('mon_profil')" class="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">Mon Profil</button>
+                        <button onclick="toggleLogin()" class="px-4 py-2 text-sm rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors">Déconnexion</button>
+                    </div>
+                </div>
+            ` : `
+                <div class="p-4 border border-gray-200 rounded-xl bg-white shadow-sm">
+                    <div class="text-sm text-gray-700 mb-3">Vous n'êtes pas connecté. Connectez-vous ou créez un compte pour publier une demande.</div>
+                    <div class="flex gap-3">
+                        <button onclick="setRoute('login')" class="flex-1 py-3 text-sm bg-primary text-white rounded-lg font-medium shadow-md hover:bg-indigo-700 transition-colors">Connexion</button>
+                        <button onclick="setRoute('register')" class="flex-1 py-3 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors">Inscription</button>
+                    </div>
+                </div>
+            `;
+
+            return `
+                <div class="max-w-md mx-auto p-4">
+                    <!-- Header/Call to Action -->
+                    <div class="bg-gradient-to-r from-primary to-secondary text-white rounded-3xl p-6 shadow-xl">
+                        <h2 class="text-2xl font-extrabold tracking-tight">Milenami — Déménagement</h2>
+                        <p class="mt-2 text-sm opacity-90">Créez votre demande, comparez les transporteurs et contactez-les directement à Lomé.</p>
+                        <div class="mt-5 flex gap-3">
+                            <button onclick="setRoute('request')" class="flex-1 bg-white text-primary font-bold py-3 rounded-xl shadow-md hover:bg-gray-100">Créer une demande</button>
+                            <button onclick="setRoute('list')" class="py-3 px-4 border border-white text-white rounded-xl hover:bg-white hover:text-primary transition-colors">Voir transporteurs</button>
+                        </div>
+                    </div>
+
+                    <!-- État du Compte -->
+                    <section class="mt-6">
+                        <h3 class="font-bold text-lg mb-3 text-gray-700">Votre Compte</h3>
+                        ${userState}
+                    </section>
+                </div>
+            `;
+        }
+
+        function Login() {
+            return `
+                <div class="max-w-md mx-auto p-4">
+                    <button onclick="setRoute('home')" class="text-sm text-gray-600 mb-4 flex items-center hover:text-primary transition-colors">
+                        ${renderIcon('<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>', false)}
+                        Retour à l'accueil
+                    </button>
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">Connexion</h2>
+                    <div class="space-y-4">
+                        <input type="email" class="w-full p-4 border border-gray-300 rounded-xl focus:ring-primary focus:border-primary transition-shadow" placeholder="Email" required />
+                        <input type="password" class="w-full p-4 border border-gray-300 rounded-xl focus:ring-primary focus:border-primary transition-shadow" placeholder="Mot de passe" required />
+                    </div>
+                    <div class="flex gap-3 mt-6">
+                        <button onclick="toggleLogin()" class="flex-1 py-4 bg-primary text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-colors">Se connecter</button>
+                    </div>
+                    <p class="text-center text-sm mt-4 text-gray-600">Pas encore de compte ? <button onclick="setRoute('register')" class="text-primary font-medium hover:underline">S'inscrire</button></p>
+                </div>
+            `;
+        }
+
+        function Register() {
+            return `
+                <div class="max-w-md mx-auto p-4">
+                    <button onclick="setRoute('home')" class="text-sm text-gray-600 mb-4 flex items-center hover:text-primary transition-colors">
+                        ${renderIcon('<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>', false)}
+                        Retour à l'accueil
+                    </button>
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">Créer un Compte</h2>
+                    <div class="space-y-4">
+                        <input type="text" class="w-full p-4 border border-gray-300 rounded-xl focus:ring-primary focus:border-primary transition-shadow" placeholder="Nom complet" required />
+                        <input type="email" class="w-full p-4 border border-gray-300 rounded-xl focus:ring-primary focus:border-primary transition-shadow" placeholder="Adresse email" required />
+                        <input type="password" class="w-full p-4 border border-gray-300 rounded-xl focus:ring-primary focus:border-primary transition-shadow" placeholder="Mot de passe" required />
+                        <div class="flex items-center space-x-2 p-2 border border-gray-300 rounded-xl bg-gray-50">
+                            <label class="text-sm font-medium text-gray-700 ml-2">Rôle :</label>
+                            <select class="p-2 bg-white border border-gray-300 rounded-lg text-sm">
+                                <option value="client">Client (Déménagement)</option>
+                                <option value="transporter">Transporteur (Fournisseur)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 mt-6">
+                        <button onclick="toggleLogin()" class="flex-1 py-4 bg-primary text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-colors">S'inscrire (Simulé)</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function RequestForm() {
+            // Simulation Google Maps pour la sélection de points
+            const mapSimulation = `
+                <div class="bg-gray-100 p-4 rounded-xl border border-gray-200">
+                    <h3 class="font-bold text-gray-700 mb-2">Localisation (Simulation Carte)</h3>
+                    <div class="flex items-center space-x-2 text-sm text-gray-600 mb-2">
+                        ${renderIcon('<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>', false)}
+                        <span>(Testez la sélection de point sur la carte)</span>
+                    </div>
+                    <div class="h-28 bg-gray-300 rounded-lg flex items-center justify-center text-xs text-gray-500 italic shadow-inner border-dashed border-2 border-gray-400">
+                        [ Google Maps Simulation - Zone Lomé ]
+                    </div>
+                </div>
+            `;
+
+            return `
+                <div class="max-w-md mx-auto p-4">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">Nouvelle Demande</h2>
+                    <div class="space-y-4">
+                        ${mapSimulation}
+                        
+                        <input type="text" class="w-full p-4 border border-gray-300 rounded-xl focus:ring-primary focus:border-primary transition-shadow" placeholder="Point de départ (Ex: Adidogomé)" value="Lomé, Adidogomé" required />
+                        <input type="text" class="w-full p-4 border border-gray-300 rounded-xl focus:ring-primary focus:border-primary transition-shadow" placeholder="Destination (Ex: Tokoin)" value="Lomé, Tokoin" required />
+                        
+                        <h3 class="font-bold text-lg text-gray-800 pt-2">Détails du Transport</h3>
+                        <input type="date" class="w-full p-4 border border-gray-300 rounded-xl focus:ring-primary focus:border-primary transition-shadow" required />
+                        <input type="text" class="w-full p-4 border border-gray-300 rounded-xl focus:ring-primary focus:border-primary transition-shadow" placeholder="Volume/Objets (Ex: 1 canapé, 4 cartons)" required />
+                        <textarea class="w-full p-4 border border-gray-300 rounded-xl focus:ring-primary focus:border-primary transition-shadow h-28" placeholder="Notes (étages, accès, aide au chargement...)" required></textarea>
+                    </div>
+                    <div class="flex gap-3 mt-6">
+                        <button onclick="showMessageBox('Demande publiée! Les transporteurs de Lomé ont été notifiés. (Simulation)', 'success'); setRoute('list');" class="flex-1 py-4 bg-primary text-white rounded-xl font-bold shadow-lg hover:bg-indigo-700 transition-colors">Publier la demande</button>
+                        <button onclick="setRoute('home')" class="py-4 px-6 border border-gray-300 rounded-xl hover:bg-gray-100 transition-colors">Annuler</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function TransporterList() {
+            const listItems = mockTransporters.map(t => `
+                <div class="p-4 border border-gray-200 rounded-xl bg-white shadow-sm flex justify-between items-center transition-shadow hover:shadow-md">
+                    <div>
+                        <div class="font-bold text-gray-800">${t.name}</div>
+                        <div class="text-xs text-gray-500 mt-1">${t.vehicle} • ${t.city}</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="setRoute('profile', ${t.id})" class="px-3 py-1 text-sm border border-primary text-primary rounded-lg hover:bg-indigo-50 transition-colors">Voir</button>
+                        <!-- Simulation de Bouton Chat -->
+                        <button onclick="setRoute('messages')" class="px-3 py-1 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center">
+                            Chat
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            return `
+                <div class="max-w-md mx-auto p-4">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">Transporteurs Disponibles</h2>
+                    <p class="text-sm text-gray-600 mb-4">Voici les profils disponibles pour votre région. Vous pouvez les contacter directement par Chat ou WhatsApp.</p>
+                    <div class="space-y-4">
+                        ${listItems}
+                    </div>
+                </div>
+            `;
+        }
+
+        function TransporterProfile() {
+            const t = selectedTransporter;
+            if (!t) return `<div class="max-w-md mx-auto p-4 text-red-500">Profil non trouvé.</div>`;
+
+            // Simulation de suivi par Map
+            const trackingSimulation = `
+                <div class="p-4 bg-gray-100 rounded-xl border border-gray-200 mt-6">
+                    <h3 class="font-bold text-gray-700 mb-2">Localisation Actuelle (Simulation)</h3>
+                    <div class="h-24 bg-gray-300 rounded-lg flex items-center justify-center text-xs text-gray-500 italic shadow-inner border-dashed border-2 border-gray-400">
+                        [ ${t.name} est localisé à Lomé ]
+                    </div>
+                    <button onclick="showMessageBox('Suivi GPS en direct non disponible en mode Bêta.', 'info')" class="mt-3 w-full py-2 bg-secondary text-white rounded-lg text-sm hover:bg-violet-600 transition-colors">
+                        Voir le suivi sur la carte
+                    </button>
+                </div>
+            `;
+
+
+            return `
+                <div class="max-w-md mx-auto p-4">
+                    <button onclick="setRoute('list')" class="text-sm text-gray-600 mb-4 flex items-center hover:text-primary transition-colors">
+                        ${renderIcon('<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>', false)}
+                        Retour à la Liste
+                    </button>
+                    <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
+                        <h2 class="text-3xl font-extrabold text-primary mb-2">${t.name}</h2>
+                        <div class="text-sm text-gray-500 mb-4">${t.city} • ${t.vehicle}</div>
+                        <p class="text-gray-700 leading-relaxed">${t.about}</p>
+
+                        ${trackingSimulation}
+
+                        <div class="mt-6 space-y-3">
+                            <h3 class="font-bold text-gray-800">Contacter</h3>
+                            <div class="flex gap-3">
+                                <a href="tel:${t.phone}" class="flex-1 py-3 border border-primary text-primary rounded-xl text-center font-medium hover:bg-indigo-50 transition-colors">
+                                    Appeler
+                                </a>
+                                <button onclick="setRoute('messages')" class="flex-1 py-3 bg-secondary text-white rounded-xl text-center font-medium hover:bg-violet-600 transition-colors">
+                                    Chat (Simulé)
+                                </button>
+                                <a href="https://wa.me/${t.phone.replace(/\+/g, '')}" target="_blank" class="flex-1 py-3 bg-green-600 text-white rounded-xl text-center font-medium hover:bg-green-700 transition-colors">
+                                    WhatsApp
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function MonProfil() {
+             const userData = currentUser ? `
+                <div class="p-6 bg-white rounded-2xl shadow-lg border border-gray-100">
+                    <h3 class="text-xl font-bold text-gray-800">Mes Informations</h3>
+                    <div class="mt-4 space-y-2">
+                        <div class="text-gray-700"><span class="font-medium">Nom:</span> ${currentUser.displayName}</div>
+                        <div class="text-gray-700"><span class="font-medium">Email:</span> ${currentUser.email}</div>
+                        <div class="text-gray-700"><span class="font-medium">Rôle:</span> ${currentUser.isTransporter ? 'Transporteur' : 'Client'}</div>
+                        <div class="pt-4">
+                            <h4 class="font-semibold text-gray-800">Historique des Demandes (Simulé)</h4>
+                            <ul class="list-disc list-inside text-sm text-gray-600 mt-2">
+                                <li>Demande #123 (Lomé -> Tokoin) - En attente</li>
+                                <li>Demande #122 (Lomé -> Adidogomé) - Terminée</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <button onclick="toggleLogin()" class="mt-6 py-2 px-4 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 transition-colors">
+                        Déconnexion
+                    </button>
+                </div>
+            ` : `<div class="p-6 bg-white rounded-xl shadow-sm text-center text-gray-500">Veuillez vous connecter pour voir votre profil.</div>`;
+            
+            return `
+                <div class="max-w-md mx-auto p-4">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">Mon Profil</h2>
+                    ${userData}
+                </div>
+            `;
+        }
+
+        function MessageList() {
+            // Mock des conversations
+            const conversations = [
+                { name: 'Services Rapides Lomé', lastMsg: 'Je peux prendre votre livraison demain matin à 8h.', time: '10:30', unread: 1 },
+                { name: 'Trans-Togo Express', lastMsg: 'Quel est le volume exact des cartons ?', time: 'Hier', unread: 0 },
+                { name: 'Admin Milenami', lastMsg: 'Bienvenue sur notre service de messagerie !', time: 'Lun', unread: 0 },
+            ];
+
+            const conversationList = conversations.map(c => `
+                <button onclick="showMessageBox('Simulation de la conversation avec ${c.name}.', 'info')" class="w-full text-left p-4 bg-white rounded-xl shadow-sm flex items-center space-x-4 border border-gray-100 hover:bg-gray-50 transition-colors">
+                    <div class="relative flex-shrink-0">
+                        <div class="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center text-gray-600 font-bold text-lg">${c.name[0]}</div>
+                        ${c.unread > 0 ? `<span class="absolute top-0 right-0 h-3 w-3 rounded-full bg-red-500 border-2 border-white"></span>` : ''}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="font-semibold text-gray-800 truncate">${c.name}</div>
+                        <p class="text-sm text-gray-500 truncate">${c.lastMsg}</p>
+                    </div>
+                    <div class="text-xs text-gray-400 flex-shrink-0">${c.time}</div>
+                </button>
+            `).join('');
+
+            return `
+                <div class="max-w-md mx-auto p-4">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">Messagerie Bêta</h2>
+                    <p class="text-sm text-gray-600 mb-4">Fonctionnalité de chat en direct pour communiquer avec les transporteurs.</p>
+                    <div class="space-y-3">
+                        ${conversationList}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderApp() {
+            const contentArea = document.getElementById('content-area');
+            const navBar = document.getElementById('nav-bar');
+
+            // 1. Rend le contenu principal
+            let content = '';
+            switch (currentRoute) {
+                case 'home': content = Home(); break;
+                case 'login': content = Login(); break;
+                case 'register': content = Register(); break;
+                case 'request': content = RequestForm(); break;
+                case 'list': content = TransporterList(); break;
+                case 'profile': content = TransporterProfile(); break; // Profil du Transporteur sélectionné
+                case 'mon_profil': content = MonProfil(); break; // Profil de l'utilisateur connecté
+                case 'messages': content = MessageList(); break;
+                default: content = Home();
+            }
+            contentArea.innerHTML = content;
+
+            // 2. Rend la barre de navigation
+            navBar.innerHTML = renderNavBar();
+        }
+
+        // Démarre l'application au chargement de la page
+        window.onload = renderApp;
+    </script>
+
+</body>
+</html>
